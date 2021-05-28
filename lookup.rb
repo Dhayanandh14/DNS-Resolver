@@ -19,30 +19,34 @@ domain = get_command_line_argument
 
 dns_raw = File.readlines("zone")
 
-def parse_dns(dns_raw)
-  main_records = {} #create a empty harsh
-  dns_raw.each.with_index { |row, index|
-    row = row.strip!.split(", ") # converted to array
-    main_records[index + 1] = { row[0] => { row[1] => row[2] } } #add or push the keys and values to the main_records harsh
-  }
-  return main_records
+def parse_dns(raw)
+  raw.
+    reject { |line| line.empty? || line[0] == "#" }.
+    map { |line| line.strip.split(", ") }.
+    reject do |record|
+    record.length < 3
+  end
+    .each_with_object({}) do |record, records|
+    records[record[1]] = {
+      type: record[0],
+      target: record[2],
+    }
+  end
 end
 
 def resolve(dns_records, lookup_chain, domain)
-  found = true # check value is there or not in that harshes
-  dns_records.each { |i|
-    if (i[1].include? "A" and (i[1]["A"][domain])) # find the domain and check the domain inside of the "A" key or not
-      found = false
-      return lookup_chain.push(i[1]["A"][domain]) # push or add the values to the lookup_chain array
-    elsif (i[1].include? "CNAME" and i[1]["CNAME"][domain]) # find the domain and check the domain inside of the "CNAME" key or not
-      found = false
-      lookup_chain.push(i[1]["CNAME"][domain])  # push or add the values to the lookup_chain array
-      return resolve(dns_records, lookup_chain, i[1]["CNAME"][domain]) # call the function recursively
-    end
-  }
-  if found
-    lookup_chain = [] # i create empty array because of prevent to print the extra elements
-    return lookup_chain.push("Error: record not found for #{domain}") # i push the error message to the lookup_chain array
+  record = dns_records[domain]
+  if (!record)
+    lookup_chain = ["Error: Record not found for " + domain]
+    return lookup_chain
+  elsif record[:type] == "CNAME"
+    lookup_chain << record[:target]  # push or add the values to the lookup_chain array
+    return resolve(dns_records, lookup_chain, record[:target]) # call the function recursively
+  elsif record[:type] == "A"
+    return lookup_chain << record[:target] # push or add the values to the lookup_chain array
+  else
+    lookup_chain << "Invalid record type for " + domain
+    return
   end
 end
 
